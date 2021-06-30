@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { DataTableDirective } from 'angular-datatables';
 import { Subject } from 'rxjs';
@@ -14,22 +14,34 @@ declare interface Tariff {
   templateUrl: './products.component.html',
   styleUrls: ['./products.component.css'],
 })
-export class ProductsComponent implements OnInit {
+export class ProductsComponent implements OnInit, OnDestroy {
+  @ViewChild(DataTableDirective, { static: true })
+  dtElement!: DataTableDirective;
+
   productForm!: FormGroup;
   invalid = false;
   products: Tariff[] = [];
-  dtTrigger: Subject<any> = new Subject<any>();
-  isloading = false;
 
-  dtOptions: DataTables.Settings = {};
   constructor(
     private _sharedService: SharedService,
     private _formBuilder: FormBuilder
   ) {}
 
+  dtOptions: DataTables.Settings = { pagingType: 'simple', searching: false };
+  dtTrigger: Subject<any> = new Subject();
+
   ngOnInit(): void {
     this.productForm = this._formBuilder.group({
       consumption: ['', Validators.pattern('^[0-9]*$')],
+    });
+  }
+
+  rerender(): void {
+    this.dtElement.dtInstance.then((dtInstance: DataTables.Api) => {
+      // Destroy the table first
+      dtInstance.destroy();
+      // Call the dtTrigger to rerender again
+      this.dtTrigger.next();
     });
   }
 
@@ -39,10 +51,9 @@ export class ProductsComponent implements OnInit {
       return;
     } else {
       let model = this.productForm.value.consumption;
-
       this._sharedService.fetchTarrif(model).subscribe((data) => {
         this.products = data;
-        this.isloading = true;
+        this.rerender();
         this.productForm.reset();
       });
     }
@@ -50,5 +61,9 @@ export class ProductsComponent implements OnInit {
 
   ngOnDestroy(): void {
     this.dtTrigger.unsubscribe();
+  }
+
+  ngAfterViewInit(): void {
+    this.dtTrigger.next();
   }
 }
